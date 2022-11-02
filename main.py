@@ -2,9 +2,8 @@ import logging
 import os
 from typing import List
 
-from fastapi import FastAPI, HTTPException, Query, UploadFile
+from fastapi import HTTPException, Query, BackgroundTasks, FastAPI
 from fastapi.responses import FileResponse
-from fastapi import BackgroundTasks, FastAPI
 
 from constants import DATA_FOLDER, PROCESS_CANDIDATES_FILE
 from exclusionms.components import ExclusionInterval, ExclusionPoint, DynamicExclusionTolerance
