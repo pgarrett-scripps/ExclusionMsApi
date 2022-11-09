@@ -17,6 +17,8 @@ app = FastAPI()
 
 active_exclusion_list = ExclusionList()
 
+print('Start')
+
 
 def get_pickle_path(exclusion_list_name: str) -> str:
     return os.path.join(DATA_FOLDER, exclusion_list_name + '.pkl')
@@ -238,8 +240,6 @@ async def add_random_intervals(n: int, min_charge: int, max_charge: int, min_mas
     tolerance = DynamicExclusionTolerance(exact_charge=use_exact_charge, mass_tolerance=mass_tolerance,
                                            rt_tolerance=rt_tolerance, ook0_tolerance=ook0_tolerance,
                                            intensity_tolerance=intensity_tolerance)
-
-
 
     for i in range(n):
         random_exclusion_point = ExclusionPoint.generate_random(min_charge=min_charge, max_charge=max_charge,

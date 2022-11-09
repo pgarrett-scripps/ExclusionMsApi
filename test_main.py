@@ -1,5 +1,8 @@
 import time
 
+from exclusionms.apihandler import get_excluded_points
+from exclusionms.components import ExclusionPoint
+from exclusionms.queryfactory import make_exclusion_points_query
 from fastapi.testclient import TestClient
 
 from main import app
@@ -350,3 +353,46 @@ def test_get_points_performance():
     total_time = time.time() - start_time
     print(f'Point Heads time: {total_time}')
     assert total_time < 1
+
+
+def test_throughput_500():
+    client.delete("/exclusionms")
+    response = client.post(f"/exclusionms/interval{example_interval}")
+    assert response.status_code == 200
+
+    exclusion_points = []
+
+    for i in range(500):
+
+        random_exclusion_point = ExclusionPoint.generate_random(min_charge=1, max_charge=5,
+                                                            min_mass=0, max_mass=5_000,
+                                                            min_rt=0, max_rt=5_000,
+                                                            min_ook0=0, max_ook0=2,
+                                                            min_intensity=0, max_intensity=10_000)
+        exclusion_points.append(random_exclusion_point)
+
+    for i in range(10):
+        query = make_exclusion_points_query(exclusion_api_ip='', exclusion_points=exclusion_points)
+        response = client.get(query)
+        assert response.status_code == 200
+
+
+def test_throughput_1000():
+    client.delete("/exclusionms")
+    response = client.post(f"/exclusionms/interval{example_interval}")
+    assert response.status_code == 200
+
+    exclusion_points = []
+
+    for i in range(1_000):
+
+        random_exclusion_point = ExclusionPoint.generate_random(min_charge=1, max_charge=5,
+                                                            min_mass=0, max_mass=5_000,
+                                                            min_rt=0, max_rt=5_000,
+                                                            min_ook0=0, max_ook0=2,
+                                                            min_intensity=0, max_intensity=10_000)
+        exclusion_points.append(random_exclusion_point)
+    query = make_exclusion_points_query(exclusion_api_ip='', exclusion_points=exclusion_points)
+    for i in range(10):
+        response = client.get(query)
+        assert response.status_code == 200
