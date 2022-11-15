@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from constants import DATA_FOLDER, PROCESS_CANDIDATES_FILE
 from exclusionms.components import ExclusionInterval, ExclusionPoint, DynamicExclusionTolerance
 from exclusionms.db import MassIntervalTree as ExclusionList
-from utils import convert_int, convert_float
+from utils import convert_int, convert_float, Offset
 
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
@@ -16,6 +16,8 @@ _log.setLevel(logging.INFO)
 app = FastAPI()
 
 active_exclusion_list = ExclusionList()
+
+offset = Offset()
 
 print('Start')
 
@@ -250,3 +252,18 @@ async def add_random_intervals(n: int, min_charge: int, max_charge: int, min_mas
         random_interval = tolerance.construct_interval(interval_id='testing', exclusion_point=random_exclusion_point)
         random_interval.convert_none()
         active_exclusion_list.add(random_interval)
+
+
+@app.get("/exclusionms/offset", status_code=200)
+async def get_offset() -> Offset:
+    _log.info(f'Get offset')
+    return offset
+
+
+@app.post("/exclusionms/offset", status_code=200)
+async def update_offset(mass: float = 0, rt: float = 0, ook0: float = 0, intensity: float = 0):
+    _log.info(f'Update offset')
+    offset.mass = mass
+    offset.rt = rt
+    offset.ook0 = ook0
+    offset.intensity = intensity
