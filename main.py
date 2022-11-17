@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import logging
 import os
-from typing import List
+from typing import List, Dict
 
 from fastapi import HTTPException, Query, BackgroundTasks, FastAPI
 from fastapi.responses import FileResponse
@@ -37,7 +39,7 @@ async def get_exclusion_list_statistics():
     _log.info(f'Exclusion List Statistics')
     saved_files = os.listdir(DATA_FOLDER)
     saved_files_names = [''.join(f.split('.')[:-1]) for f in saved_files]
-    return {'files': saved_files_names, 'active_exclusion_list':active_exclusion_list.stats()}
+    return {'files': saved_files_names, 'active_exclusion_list': active_exclusion_list.stats()}
 
 
 # TODO: Add in merge command
@@ -122,28 +124,7 @@ async def get_interval(interval_id: str | None = None, charge: int | None = None
 
     intervals = active_exclusion_list.query_by_interval(exclusion_interval)
 
-    if not intervals:
-        raise HTTPException(status_code=404, detail=f"No intervals found")
-
     return intervals
-
-
-@app.head("/exclusionms/interval", status_code=200)
-async def head_interval(interval_id: str | None = None, charge: int | None = None, min_mass: float | None = None,
-                        max_mass: float | None = None, min_rt: float | None = None, max_rt: float | None = None,
-                        min_ook0: float | None = None, max_ook0: float | None = None,
-                        min_intensity: float | None = None, max_intensity: float | None = None):
-    exclusion_interval = ExclusionInterval(id=interval_id, charge=charge, min_mass=min_mass, max_mass=max_mass,
-                                           min_rt=min_rt, max_rt=max_rt, min_ook0=min_ook0, max_ook0=max_ook0,
-                                           min_intensity=min_intensity, max_intensity=max_intensity)
-    exclusion_interval.convert_none()
-    if not exclusion_interval.is_valid():
-        raise HTTPException(status_code=400, detail=f"exclusion interval invalid. Check min/max bounds.")
-
-    intervals = active_exclusion_list.query_by_interval(exclusion_interval)
-
-    if not intervals:
-        raise HTTPException(status_code=404, detail=f"No intervals found")
 
 
 def _add_exclusion_interval(exclusion_interval: ExclusionInterval):
@@ -152,106 +133,45 @@ def _add_exclusion_interval(exclusion_interval: ExclusionInterval):
 
 
 @app.post("/exclusionms/interval", status_code=200)
-async def add_interval(background_tasks: BackgroundTasks,
-                       interval_id: str | None = None, charge: int | None = None, min_mass: float | None = None,
-                       max_mass: float | None = None, min_rt: float | None = None, max_rt: float | None = None,
-                       min_ook0: float | None = None, max_ook0: float | None = None, min_intensity: float | None = None,
-                       max_intensity: float | None = None):
-    exclusion_interval = ExclusionInterval(id=interval_id, charge=charge, min_mass=min_mass, max_mass=max_mass,
-                                           min_rt=min_rt, max_rt=max_rt, min_ook0=min_ook0, max_ook0=max_ook0,
-                                           min_intensity=min_intensity, max_intensity=max_intensity)
+async def add_interval(background_tasks: BackgroundTasks, exclusion_interval_dict: Dict):
+    exclusion_interval = ExclusionInterval.from_dict(exclusion_interval_dict)
+
     exclusion_interval.convert_none()
 
-    if not exclusion_interval.is_valid() or interval_id is None:
+    if not exclusion_interval.is_valid() or exclusion_interval.id is None:
         raise HTTPException(status_code=400, detail=f"exclusion interval invalid. Check min/max bounds.")
 
     background_tasks.add_task(active_exclusion_list.add, ex_interval=exclusion_interval)
 
 
-# TODO: Return deleted Items?
-@app.delete("/exclusionms/interval", status_code=200)
-async def remove_interval(background_tasks: BackgroundTasks,
-                          interval_id: str | None = None, charge: int | None = None, min_mass: float | None = None,
-                          max_mass: float | None = None, min_rt: float | None = None, max_rt: float | None = None,
-                          min_ook0: float | None = None, max_ook0: float | None = None,
-                          min_intensity: float | None = None, max_intensity: float | None = None):
-    exclusion_interval = ExclusionInterval(id=interval_id, charge=charge, min_mass=min_mass, max_mass=max_mass,
-                                           min_rt=min_rt, max_rt=max_rt, min_ook0=min_ook0, max_ook0=max_ook0,
-                                           min_intensity=min_intensity, max_intensity=max_intensity)
+@app.delete("/exclusionms/interval", response_model=List[Dict], status_code=200)
+async def remove_interval(exclusion_interval_dict: Dict):
+    exclusion_interval = ExclusionInterval.from_dict(exclusion_interval_dict)
+
     exclusion_interval.convert_none()
 
     if not exclusion_interval.is_valid():
         raise HTTPException(status_code=400, detail=f"exclusion interval invalid. Check min/max bounds.")
 
-    background_tasks.add_task(active_exclusion_list.remove, ex_interval=exclusion_interval)
+    interval_dicts = [interval.dict() for interval in active_exclusion_list.remove(exclusion_interval)]
+    return
 
 
-@app.get("/exclusionms/point", response_model=List[ExclusionInterval], status_code=200)
+@app.get("/exclusionms/point", response_model=List[Dict], status_code=200)
 async def get_point(charge: int | None = None, mass: float | None = None,
                     rt: float | None = None, ook0: float | None = None, intensity: float | None = None):
     exclusion_point = ExclusionPoint(charge=charge, mass=mass, rt=rt, ook0=ook0, intensity=intensity)
-    intervals = active_exclusion_list.query_by_point(exclusion_point)
-
-    if not intervals:
-        raise HTTPException(status_code=404, detail=f"No intervals found")
-
-    return intervals
+    return active_exclusion_list.query_by_point(exclusion_point)
 
 
-@app.head("/exclusionms/point", status_code=200)
-async def head_point(charge: int | None = None, mass: float | None = None,
-                     rt: float | None = None, ook0: float | None = None, intensity: float | None = None):
-    exclusion_point = ExclusionPoint(charge=charge, mass=mass, rt=rt, ook0=ook0, intensity=intensity)
-    intervals = active_exclusion_list.query_by_point(exclusion_point)
-
-    if not intervals:
-        raise HTTPException(status_code=404, detail=f"No intervals found")
-
-
-@app.get("/exclusionms/points", response_model=List[bool], status_code=200)
-async def get_points(charge: List[int | str] = Query(), mass: List[int | str] = Query(), rt: List[int | str] = Query(),
-                     ook0: List[int | str] = Query(), intensity: List[int | str] = Query()):
-    if len({len(i) for i in [charge, mass, rt, ook0, intensity]}) != 1:
-        raise HTTPException(status_code=400, detail=f"lists are not the same size")
-
-    points = []
-    for point_values in zip(charge, mass, rt, ook0, intensity):
-        point = ExclusionPoint(charge=convert_int(point_values[0]), mass=convert_float(point_values[1]),
-                               rt=convert_float(point_values[2]), ook0=convert_float(point_values[3]),
-                               intensity=convert_float(point_values[4]))
-        points.append(point)
-
-    exclusions = []
-    for point in points:
-        exclusions.append(active_exclusion_list.is_excluded(point))
-    return exclusions
+@app.post("/exclusionms/excluded_points", response_model=List[bool], status_code=200)
+async def get_points(exclusion_points: list[ExclusionPoint]):
+    return [active_exclusion_list.is_excluded(point) for point in exclusion_points]
 
 
 @app.get("/exclusionms/stats", status_code=200)
 async def get_statistics():
     return active_exclusion_list.stats()
-
-
-@app.get("/exclusionms/random/interval", status_code=200)
-async def add_random_intervals(n: int, min_charge: int, max_charge: int, min_mass: float, max_mass: float, min_rt: float,
-                               max_rt: float, min_ook0: float, max_ook0: float, min_intensity: float,
-                               max_intensity: float, use_exact_charge: bool, mass_tolerance: float | None = None,
-                               rt_tolerance: float | None = None, ook0_tolerance: float | None = None,
-                               intensity_tolerance: float | None = None):
-
-    tolerance = DynamicExclusionTolerance(exact_charge=use_exact_charge, mass_tolerance=mass_tolerance,
-                                           rt_tolerance=rt_tolerance, ook0_tolerance=ook0_tolerance,
-                                           intensity_tolerance=intensity_tolerance)
-
-    for i in range(n):
-        random_exclusion_point = ExclusionPoint.generate_random(min_charge=min_charge, max_charge=max_charge,
-                                                                min_mass=min_mass, max_mass=max_mass,
-                                                                min_rt=min_rt, max_rt=max_rt,
-                                                                min_ook0=min_ook0, max_ook0=max_ook0,
-                                                                min_intensity=min_intensity, max_intensity=max_intensity)
-        random_interval = tolerance.construct_interval(interval_id='testing', exclusion_point=random_exclusion_point)
-        random_interval.convert_none()
-        active_exclusion_list.add(random_interval)
 
 
 @app.get("/exclusionms/offset", status_code=200)

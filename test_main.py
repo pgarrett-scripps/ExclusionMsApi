@@ -1,8 +1,6 @@
-import time
+import json
 
-from exclusionms.apihandler import get_excluded_points
-from exclusionms.components import ExclusionPoint
-from exclusionms.queryfactory import make_exclusion_points_query
+import exclusionms.components
 from fastapi.testclient import TestClient
 
 from main import app
@@ -27,9 +25,51 @@ example_interval_dict = \
         "max_intensity": 1001
     }
 
+example_interval_with_none_dict = \
+    {
+        "id": "PEPTIDE",
+        "charge": 1,
+        "min_mass": 1000,
+        "max_mass": 1001,
+        "min_rt": 'None',
+        "max_rt": 1001,
+        "min_ook0": 'None',
+        "max_ook0": 'None',
+        "min_intensity": 1000,
+        "max_intensity": 'None'
+    }
+
+
+example_oob_interval_dict = \
+    {
+        "id": "PEPTIDE",
+        "charge": 1,
+        "min_mass": 1002,
+        "max_mass": 1001,
+        "min_rt": 1000,
+        "max_rt": 1001,
+        "min_ook0": 1000,
+        "max_ook0": 1001,
+        "min_intensity": 1000,
+        "max_intensity": 1001
+    }
+
 example_point = '?charge=1&mass=1000.5&rt=1000.5&ook0=1000.5&intensity=1000.5'
 example_points = '?charge=1&mass=1000.5&rt=1000.5&ook0=1000.5&intensity=1000.5&charge=1&mass=1000.5&rt=1000.5' \
                  '&ook0=1000.5&intensity=1000.5'
+
+example_point_dicts = [{"charge":1,
+                       "mass":1000.5,
+                       "rt":1000.5,
+                       "ook0":1000.5,
+                       "intensity": 1000.5
+                       },
+                       {"charge":1,
+                       "mass":1000.5,
+                       "rt":1000.5,
+                       "ook0":1000.5,
+                       "intensity": 1000.5
+                       }]
 
 
 def test_post_exclusion():
@@ -76,7 +116,7 @@ def test_delete_exclusion_save_fail():
 
 def test_save_load():
     client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")  # add interval
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)  # add interval
     assert response.status_code == 200
 
     response = client.post("/exclusionms?save=True&exclusion_list_name=testing")  # save
@@ -86,7 +126,7 @@ def test_save_load():
     assert response.status_code == 200
     assert response.json() == [example_interval_dict]
 
-    response = client.post(f"/exclusionms/interval{example_interval}")  # add interval
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)  # add interval
     assert response.status_code == 200
 
     response = client.get(f"/exclusionms/interval{example_interval}")  # get intervals
@@ -104,16 +144,19 @@ def test_save_load():
 def test_post_exclusion_interval():
     client.delete("/exclusionms")
 
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
-    response = client.post(f"/exclusionms/interval{example_oob_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_oob_interval_dict)
     assert response.status_code == 400
+
+    response = client.post(f"/exclusionms/interval", json=example_interval_with_none_dict)
+    assert response.status_code == 200
 
 
 def test_get_exclusion_interval():
     client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
     response = client.get(f"/exclusionms/interval{example_interval}")
@@ -123,7 +166,7 @@ def test_get_exclusion_interval():
 
 def test_get_exclusion_interval_by_id():
     client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
     response = client.get(f"/exclusionms/interval?interval_id=PEPTIDE")
@@ -131,12 +174,13 @@ def test_get_exclusion_interval_by_id():
     assert response.json() == [example_interval_dict]
 
     response = client.get(f"/exclusionms/interval?interval_id=PEPTIDE2")
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 def test_get_exclusion_interval_by_mass():
     client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
     response = client.get(f"/exclusionms/interval?min_mass=1000&max_mass=1001")
@@ -155,39 +199,44 @@ def test_get_exclusion_interval_by_mass():
     assert response.status_code == 400
 
     response = client.get(f"/exclusionms/interval?min_mass=1001")
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.json() == []
 
     response = client.get(f"/exclusionms/interval?max_mass=1000")
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 def test_delete_exclusion_interval():
     client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
-    response = client.delete(f"/exclusionms/interval{example_interval}")
+    response = client.delete(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
     # Test if interval was deleted, plus add the interval back in
     response = client.get(f"/exclusionms/interval{example_interval}")
-    assert response.status_code == 404
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    assert response.status_code == 200
+    assert response.json() == []
+
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
     response = client.get(f"/exclusionms/interval{example_interval}")
     assert response.status_code == 200
     assert response.json() == [example_interval_dict]
 
-    response = client.delete(f"/exclusionms/interval{example_oob_interval}")
-    assert response.status_code == 400
+    response = client.delete(f"/exclusionms/interval", json=example_interval_dict)
+    assert response.status_code == 200
+    assert response.json() == [example_interval_dict]
 
 
 def test_get_multiple_exclusion_interval():
     client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
     response = client.get(f"/exclusionms/interval{example_interval}")
@@ -197,22 +246,24 @@ def test_get_multiple_exclusion_interval():
 
 def test_delete_multiple_exclusion_interval():
     client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
-    response = client.delete(f"/exclusionms/interval{example_interval}")
+    response = client.delete(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
+    assert response.json() == [example_interval_dict]
 
     response = client.get(f"/exclusionms/interval{example_interval}")
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.json() == []
 
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
 
 def test_get_point():
     client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
     response = client.get(f"/exclusionms/point{example_point}")
@@ -232,167 +283,46 @@ def test_get_point():
     assert response.json() == [example_interval_dict]
 
     response = client.get(f"/exclusionms/point?mass=1001")
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert len(json.loads(response.content)) == 0
 
     response = client.get(f"/exclusionms/point?rt=1000")
     assert response.status_code == 200
     assert response.json() == [example_interval_dict]
 
     response = client.get(f"/exclusionms/point?rt=1001")
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert len(json.loads(response.content)) == 0
 
     response = client.get(f"/exclusionms/point?ook0=1000")
     assert response.status_code == 200
     assert response.json() == [example_interval_dict]
 
     response = client.get(f"/exclusionms/point?ook0=1001")
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert len(json.loads(response.content)) == 0
 
     response = client.get(f"/exclusionms/point?intensity=1000")
     assert response.status_code == 200
     assert response.json() == [example_interval_dict]
 
     response = client.get(f"/exclusionms/point?intensity=1001")
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert len(json.loads(response.content)) == 0
 
 
 def test_get_points():
     client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
+    response = client.post(f"/exclusionms/interval", json=example_interval_dict)
     assert response.status_code == 200
 
-    response = client.get(f"/exclusionms/points{example_points}")
+    response = client.post(f"/exclusionms/excluded_points", json=example_point_dicts)
     assert response.status_code == 200
     assert response.json() == [True, True]
 
 
-def test_add_interval_performance():
-    client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
-    assert response.status_code == 200
-
-    start_time = time.time()
-    for i in range(100):
-        client.post(f"/exclusionms/interval{example_interval}")
-
-    total_time = time.time() - start_time
-    print(f'Interval Add time: {total_time}')
-    assert total_time < 1
 
 
-def test_get_interval_performance():
-    client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
-    assert response.status_code == 200
-
-    start_time = time.time()
-    for i in range(100):
-        client.get(f"/exclusionms/interval{example_interval}")
-
-    total_time = time.time() - start_time
-    print(f'Interval Get time: {total_time}')
-    assert total_time < 1
 
 
-def test_head_interval_performance():
-    client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
-    assert response.status_code == 200
 
-    start_time = time.time()
-    for i in range(100):
-        client.head(f"/exclusionms/interval{example_interval}")
-
-    total_time = time.time() - start_time
-    print(f'Interval Head time: {total_time}')
-    assert total_time < 1
-
-
-def test_get_point_performance():
-    client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
-    assert response.status_code == 200
-
-    start_time = time.time()
-    for i in range(100):
-        client.get(f"/exclusionms/point{example_point}")
-
-    total_time = time.time() - start_time
-    print(f'Point Get time: {total_time}')
-    assert total_time < 1
-
-
-def test_head_point_performance():
-    client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
-    assert response.status_code == 200
-
-    start_time = time.time()
-    for i in range(100):
-        client.head(f"/exclusionms/point{example_point}")
-
-    total_time = time.time() - start_time
-    print(f'Point Head time: {total_time}')
-    assert total_time < 1
-
-
-def test_get_points_performance():
-    client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
-    assert response.status_code == 200
-
-    sub_str = '&charge=1&mass=1000.5&rt=1000.5&ook0=1000.5&intensity=1000.5'
-
-    sub_strs = [sub_str] * 100
-    sub_strs[0] = example_point
-    points_query = ''.join(sub_strs)
-
-    start_time = time.time()
-    client.get(f"/exclusionms/points{points_query}")
-
-    total_time = time.time() - start_time
-    print(f'Point Heads time: {total_time}')
-    assert total_time < 1
-
-
-def test_throughput_500():
-    client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
-    assert response.status_code == 200
-
-    exclusion_points = []
-
-    for i in range(500):
-
-        random_exclusion_point = ExclusionPoint.generate_random(min_charge=1, max_charge=5,
-                                                            min_mass=0, max_mass=5_000,
-                                                            min_rt=0, max_rt=5_000,
-                                                            min_ook0=0, max_ook0=2,
-                                                            min_intensity=0, max_intensity=10_000)
-        exclusion_points.append(random_exclusion_point)
-
-    for i in range(10):
-        query = make_exclusion_points_query(exclusion_api_ip='', exclusion_points=exclusion_points)
-        response = client.get(query)
-        assert response.status_code == 200
-
-
-def test_throughput_1000():
-    client.delete("/exclusionms")
-    response = client.post(f"/exclusionms/interval{example_interval}")
-    assert response.status_code == 200
-
-    exclusion_points = []
-
-    for i in range(1_000):
-
-        random_exclusion_point = ExclusionPoint.generate_random(min_charge=1, max_charge=5,
-                                                            min_mass=0, max_mass=5_000,
-                                                            min_rt=0, max_rt=5_000,
-                                                            min_ook0=0, max_ook0=2,
-                                                            min_intensity=0, max_intensity=10_000)
-        exclusion_points.append(random_exclusion_point)
-    query = make_exclusion_points_query(exclusion_api_ip='', exclusion_points=exclusion_points)
-    for i in range(10):
-        response = client.get(query)
-        assert response.status_code == 200
