@@ -39,7 +39,6 @@ example_interval_with_none_dict = \
         "max_intensity": 'None'
     }
 
-
 example_oob_interval_dict = \
     {
         "interval_id": "PEPTIDE",
@@ -58,18 +57,18 @@ example_point = '?charge=1&mass=1000.5&rt=1000.5&ook0=1000.5&intensity=1000.5'
 example_points = '?charge=1&mass=1000.5&rt=1000.5&ook0=1000.5&intensity=1000.5&charge=1&mass=1000.5&rt=1000.5' \
                  '&ook0=1000.5&intensity=1000.5'
 
-example_point_dicts = [{"charge":'1',
-                       "mass":'1000.5',
-                       "rt":'1000.5',
-                       "ook0":'1000.5',
-                       "intensity": '1000.5'
-                       },
-                       {"charge":'1',
-                       "mass":'1000.5',
-                       "rt":'1000.5',
-                       "ook0":'1000.5',
-                       "intensity": '1000.5'
-                       }]
+example_point_dicts = [{"charge": '1',
+                        "mass": '1000.5',
+                        "rt": '1000.5',
+                        "ook0": '1000.5',
+                        "intensity": '1000.5'
+                        },
+                       {"charge": '1',
+                        "mass": '1000.5',
+                        "rt": '1000.5',
+                        "ook0": '1000.5',
+                        "intensity": '1000.5'
+                        }]
 
 
 def test_post_exclusion():
@@ -299,7 +298,6 @@ def test_get_exclusion_interval():
     assert response.json() == [example_interval_dict]
 
 
-
 def test_delete_exclusion_interval():
     client.delete("/exclusionms")
     response = client.post(f"/exclusionms/interval", json=example_interval_dict)
@@ -367,7 +365,6 @@ def test_get_point():
     assert response.status_code == 200
     assert response.json() == [example_interval_dict]
 
-
     response = client.get(f"/exclusionms/point?charge=1&mass=None&rt=None&ook0=None&intensity=None")
     assert response.status_code == 200
     assert response.json() == [example_interval_dict]
@@ -413,10 +410,3 @@ def test_get_points():
     response = client.post(f"/exclusionms/excluded_points", json=example_point_dicts)
     assert response.status_code == 200
     assert response.json() == [True, True]
-
-
-
-
-
-
-
