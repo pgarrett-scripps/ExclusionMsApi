@@ -130,7 +130,7 @@ def test_save_load():
 
     response = client.get(f"/exclusionms/interval{example_interval}")  # get intervals
     assert response.status_code == 200
-    assert response.json() == [example_interval_dict, example_interval_dict]
+    assert response.json() == [example_interval_dict]
 
     response = client.post("/exclusionms?save=False&exclusion_list_name=testing")  # load
     assert response.status_code == 200
@@ -332,7 +332,7 @@ def test_get_multiple_exclusion_interval():
 
     response = client.get(f"/exclusionms/interval{example_interval}")
     assert response.status_code == 200
-    assert response.json() == [example_interval_dict, example_interval_dict]
+    assert response.json() == [example_interval_dict]
 
 
 def test_delete_multiple_exclusion_interval():
