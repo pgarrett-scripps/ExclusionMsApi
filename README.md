@@ -7,6 +7,5 @@
 
 TODO:
 1) Merge ExclusionLists
-2) Use R-tree
 3) Align ExclusionLists
 4) Determine best Tolerances

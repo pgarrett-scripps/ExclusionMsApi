@@ -8,7 +8,7 @@ from fastapi import HTTPException, FastAPI
 from fastapi.responses import FileResponse
 
 from constants import DATA_FOLDER, PROCESS_CANDIDATES_FILE
-from exclusionms.components import ExclusionIntervalMsg, ExclusionPointMsg
+from exclusionms.components import ExclusionIntervalMsg, ExclusionPointMsg, ExclusionPoint
 from exclusionms.db import MassIntervalTree as ExclusionList
 from utils import Offset
 
@@ -36,7 +36,7 @@ async def get_exclusion_list_statistics():
     _log.info(f'Exclusion List Statistics')
     saved_files = os.listdir(DATA_FOLDER)
     saved_files_names = [''.join(f.split('.')[:-1]) for f in saved_files]
-    return {'files': saved_files_names, 'active_exclusion_list': active_exclusion_list.stats()}
+    return {'files': saved_files_names, 'active_exclusion_list': active_exclusion_list.stats(), 'Offsets:': offset}
 
 
 # TODO: Add in merge command
@@ -161,9 +161,24 @@ async def get_point(charge: str, mass: str, rt: str, ook0: str, intensity: str):
     return [ExclusionIntervalMsg.from_exclusion_interval(interval) for interval in exclusion_intervals]
 
 
+def apply_offset(point: ExclusionPoint, offset: Offset):
+    if point.mass:
+        point.mass += offset.mass
+    if point.rt:
+        point.rt += offset.rt
+    if point.ook0:
+        point.ook0 += offset.ook0
+    if point.intensity:
+        point.intensity += offset.intensity
+
+
 @app.post("/exclusionms/excluded_points", response_model=List[bool], status_code=200)
 async def get_points(exclusion_point_msgs: list[ExclusionPointMsg]):
     exclusion_points = [msg.to_exclusion_point() for msg in exclusion_point_msgs]
+
+    for point in exclusion_points:
+        apply_offset(point, offset)
+
     return [active_exclusion_list.is_excluded(point) for point in exclusion_points]
 
 
