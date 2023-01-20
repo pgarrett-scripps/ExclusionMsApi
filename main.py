@@ -4,11 +4,11 @@ import logging
 import os
 from typing import List
 
-from fastapi import HTTPException, FastAPI
+from fastapi import HTTPException, FastAPI, BackgroundTasks
 from fastapi.responses import FileResponse
 
 from constants import DATA_FOLDER, PROCESS_CANDIDATES_FILE
-from exclusionms.components import ExclusionIntervalMsg, ExclusionPointMsg, ExclusionPoint
+from exclusionms.components import ExclusionInterval, ExclusionPoint
 from exclusionms.db import MassIntervalTree as ExclusionList
 from utils import Offset
 
@@ -106,25 +106,22 @@ async def upload_exclusion_list_save(file):
     return
 
 
-@app.get("/exclusionms/interval", response_model=List[ExclusionIntervalMsg], status_code=200)
-async def get_interval(interval_id: str, charge: str, min_mass: str, max_mass: str, min_rt: str, max_rt: str,
-                       min_ook0: str, max_ook0: str, min_intensity: str, max_intensity: str):
-    exclusion_interval = ExclusionIntervalMsg(interval_id=interval_id, charge=charge, min_mass=min_mass, max_mass=max_mass,
+@app.get("/exclusionms/interval", response_model=List[ExclusionInterval], status_code=200)
+async def get_interval(interval_id: str, charge: int | None, min_mass: float | None, max_mass: float | None, min_rt: float | None, max_rt: float | None,
+                       min_ook0: float | None, max_ook0: float | None, min_intensity: float | None, max_intensity: float | None):
+    exclusion_interval = ExclusionInterval(interval_id=interval_id, charge=charge, min_mass=min_mass, max_mass=max_mass,
                                               min_rt=min_rt, max_rt=max_rt, min_ook0=min_ook0, max_ook0=max_ook0,
-                                              min_intensity=min_intensity, max_intensity=max_intensity)\
-        .to_exclusion_interval()
+                                              min_intensity=min_intensity, max_intensity=max_intensity)
 
     if not exclusion_interval.is_valid():
         raise HTTPException(status_code=400, detail=f"exclusion interval invalid. Check min/max bounds. {exclusion_interval}")
 
     intervals = active_exclusion_list.query_by_interval(exclusion_interval)
-    interval_msgs = [ExclusionIntervalMsg.from_exclusion_interval(interval) for interval in intervals]
-    return interval_msgs
+    return intervals
 
 
 @app.post("/exclusionms/interval", status_code=200)
-async def add_interval(exclusion_interval_msg: ExclusionIntervalMsg):
-    exclusion_interval = ExclusionIntervalMsg.to_exclusion_interval(exclusion_interval_msg)
+async def add_interval(exclusion_interval: ExclusionInterval):
 
     if not exclusion_interval.is_valid() or exclusion_interval.interval_id is None:
         raise HTTPException(status_code=400, detail=f"exclusion interval invalid. Check min/max bounds. {exclusion_interval}")
@@ -133,32 +130,27 @@ async def add_interval(exclusion_interval_msg: ExclusionIntervalMsg):
 
 
 @app.post("/exclusionms/intervals", status_code=200)
-async def add_interval(exclusion_interval_msgs: List[ExclusionIntervalMsg]):
-    for exclusion_interval_msg in exclusion_interval_msgs:
-        exclusion_interval = ExclusionIntervalMsg.to_exclusion_interval(exclusion_interval_msg)
-
+async def add_intervals(exclusion_intervals: List[ExclusionInterval], background_tasks: BackgroundTasks):
+    for exclusion_interval in exclusion_intervals:
         if not exclusion_interval.is_valid() or exclusion_interval.interval_id is None:
             raise HTTPException(status_code=400, detail=f"exclusion interval invalid. Check min/max bounds.")
 
-        active_exclusion_list.add(ex_interval=exclusion_interval)
+        background_tasks.add_task(active_exclusion_list.add, exclusion_interval)
 
-
-@app.delete("/exclusionms/interval", response_model=List[ExclusionIntervalMsg], status_code=200)
-async def remove_interval(exclusion_interval_msg: ExclusionIntervalMsg):
-    exclusion_interval = ExclusionIntervalMsg.to_exclusion_interval(exclusion_interval_msg)
+@app.delete("/exclusionms/interval", response_model=List[ExclusionInterval], status_code=200)
+async def remove_interval(exclusion_interval: ExclusionInterval):
     if not exclusion_interval.is_valid():
         raise HTTPException(status_code=400, detail=f"exclusion interval invalid. Check min/max bounds.")
     intervals = active_exclusion_list.remove(exclusion_interval)
-    interval_msgs = [ExclusionIntervalMsg.from_exclusion_interval(interval) for interval in intervals]
-    return interval_msgs
+    return intervals
 
 
-@app.get("/exclusionms/point", response_model=List[ExclusionIntervalMsg], status_code=200)
-async def get_point(charge: str, mass: str, rt: str, ook0: str, intensity: str):
-    exclusion_point = ExclusionPointMsg(charge=charge, mass=mass, rt=rt, ook0=ook0,
-                                        intensity=intensity).to_exclusion_point()
+@app.get("/exclusionms/point", response_model=List[ExclusionInterval], status_code=200)
+async def get_point(charge: int, mass: float | None, rt: float | None, ook0: float | None, intensity: float | None):
+    exclusion_point = ExclusionPoint(charge=charge, mass=mass, rt=rt, ook0=ook0,
+                                        intensity=intensity)
     exclusion_intervals = active_exclusion_list.query_by_point(exclusion_point)
-    return [ExclusionIntervalMsg.from_exclusion_interval(interval) for interval in exclusion_intervals]
+    return exclusion_intervals
 
 
 def apply_offset(point: ExclusionPoint, offset: Offset):
@@ -173,8 +165,7 @@ def apply_offset(point: ExclusionPoint, offset: Offset):
 
 
 @app.post("/exclusionms/excluded_points", response_model=List[bool], status_code=200)
-async def get_points(exclusion_point_msgs: list[ExclusionPointMsg]):
-    exclusion_points = [msg.to_exclusion_point() for msg in exclusion_point_msgs]
+async def get_points(exclusion_points: list[ExclusionPoint]):
 
     for point in exclusion_points:
         apply_offset(point, offset)
