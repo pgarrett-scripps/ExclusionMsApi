@@ -1,6 +1,6 @@
 import json
 
-import exclusionms.components
+from exclusionms.components import ExclusionInterval
 from fastapi.testclient import TestClient
 
 from main import app
