@@ -1,0 +1,8 @@
+version: '3.8'
+
+services:
+  exclusion-ms-fastapi:
+    image: pgarrettscripps/exclusion-ms-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
