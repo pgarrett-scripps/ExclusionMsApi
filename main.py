@@ -1,4 +1,6 @@
 import logging
+from logging.handlers import RotatingFileHandler
+
 from typing import List, Dict
 
 from fastapi import HTTPException, FastAPI, BackgroundTasks
@@ -20,11 +22,14 @@ import os
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
 
+max_file_size = 10 * 1024 * 1024  # 10 MB
+backup_count = 5  # Number of backup log files to keep
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("request_history.log"),
+        RotatingFileHandler("request_history.log", maxBytes=max_file_size, backupCount=backup_count),
         logging.StreamHandler()
     ],
 )
