@@ -1,16 +1,75 @@
 import logging
-import os
 from typing import List, Dict
 
-from fastapi import HTTPException, FastAPI
-import asyncio
+from fastapi import HTTPException, FastAPI, BackgroundTasks
+
 from constants import DATA_FOLDER
 from exclusionms.components import ExclusionInterval, ExclusionPoint
 from exclusionms.db import MassIntervalTree as ExclusionList
 from utils import Offset
 
+import asyncio
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+import time
+import json
+import os
+
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("request_history.log"),
+        logging.StreamHandler()
+    ],
+)
+
+logger = logging.getLogger(__name__)
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Get request data
+        request_data = {
+            'method': request.method,
+            'url': str(request.url),
+            'headers': dict(request.headers),
+        }
+
+        # Record the start time
+        start_time = time.time()
+
+        # Get response data
+        response: Response = await call_next(request)
+
+        # Calculate the time taken to process the request
+        time_taken = time.time() - start_time
+
+        response_data = {
+            'status_code': response.status_code,
+            'headers': dict(response.headers),
+            'client_ip': request.client.host,
+        }
+
+        # Combine request, response data, and timings
+        log_entry = {
+            'request': request_data,
+            'response': response_data,
+            'time_taken': time_taken,
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(start_time)),
+        }
+
+        # Write the log entry to a file
+        log_file = 'api_calls.log'
+        mode = 'a' if os.path.exists(log_file) else 'w'
+        with open(log_file, mode) as f:
+            f.write(json.dumps(log_entry) + "\n")
+
+        return response
+
 
 app = FastAPI(
     title="ExclusionMS",
@@ -21,6 +80,8 @@ app = FastAPI(
         "email": "pgarrett@scripps.edu",
     }
 )
+
+app.add_middleware(LoggingMiddleware)
 
 tags_metadata = [
     {
@@ -44,7 +105,6 @@ tags_metadata = [
 active_exclusion_list = ExclusionList()
 offset = Offset()
 lock = asyncio.Lock()
-
 
 def get_pickle_path(exclusion_list_name: str) -> str:
     return os.path.join(DATA_FOLDER, exclusion_list_name + '.pkl')
@@ -220,8 +280,14 @@ async def search_intervals(exclusion_intervals: List[ExclusionInterval]):
     return intervals
 
 
+async def process_intervals(exclusion_intervals: List[ExclusionInterval]):
+    for interval in exclusion_intervals:
+        async with lock:
+            active_exclusion_list.add(interval)
+
+
 @app.post("/exclusionms/intervals", response_model=None, status_code=200, tags=["Intervals"])
-async def add_intervals(exclusion_intervals: List[ExclusionInterval]):
+async def add_intervals(exclusion_intervals: List[ExclusionInterval], background_tasks: BackgroundTasks):
     """
     Adds the given exclusion intervals to the active exclusion list. If successful, returns a status code of 200.
 
@@ -238,14 +304,13 @@ async def add_intervals(exclusion_intervals: List[ExclusionInterval]):
     Notes:
         The function acquires a lock on the active exclusion list before adding intervals to ensure thread safety.
     """
+
     for exclusion_interval in exclusion_intervals:
         if not exclusion_interval.is_valid():
             raise HTTPException(status_code=400,
                                 detail=f"exclusion interval invalid. Check min/max bounds. {exclusion_interval}")
 
-    for exclusion_interval in exclusion_intervals:
-        async with lock:
-            active_exclusion_list.add(exclusion_interval)
+    background_tasks.add_task(process_intervals, exclusion_intervals)
 
 
 @app.delete("/exclusionms/intervals", response_model=List[List[ExclusionInterval]], status_code=200, tags=["Intervals"])
@@ -381,3 +446,25 @@ async def update_offset(mass: float = 0, rt: float = 0, ook0: float = 0, intensi
     offset.rt = rt
     offset.ook0 = ook0
     offset.intensity = intensity
+
+
+@app.get('/logs/entries')
+async def get_log_entries(num_entries: int = 500):
+    log_file = 'api_calls.log'
+    entries = []
+
+    if os.path.exists(log_file):
+        with open(log_file, 'r') as f:
+            lines = f.readlines()
+
+        # Get the last num_entries lines (log entries)
+        last_n_lines = lines[-num_entries:]
+
+        for line in last_n_lines:
+            try:
+                entry = json.loads(line.strip())
+                entries.append(entry)
+            except json.JSONDecodeError:
+                pass
+
+    return entries
