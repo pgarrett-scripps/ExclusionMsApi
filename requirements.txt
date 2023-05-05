@@ -3,4 +3,4 @@ fastapi==0.89.1
 intervaltree==3.1.0
 uvicorn==0.20.0
 pytest==7.2.1
-exclusionms==0.2.0
+exclusionms==0.2.1
