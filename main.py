@@ -6,7 +6,7 @@ from typing import List, Dict
 from fastapi import HTTPException, FastAPI, BackgroundTasks
 
 from constants import DATA_FOLDER
-from exclusionms.components import ExclusionInterval, ExclusionPoint
+from exclusionms.components import ExclusionInterval, ExclusionPoint, ExclusionPointBatchMessage
 from exclusionms.db import MassIntervalTree as ExclusionList
 from utils import Offset
 
@@ -35,6 +35,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Get request data
@@ -110,6 +112,7 @@ tags_metadata = [
 active_exclusion_list = ExclusionList()
 offset = Offset()
 lock = asyncio.Lock()
+
 
 def get_pickle_path(exclusion_list_name: str) -> str:
     return os.path.join(DATA_FOLDER, exclusion_list_name + '.pkl')
@@ -418,6 +421,80 @@ async def exclusion_search_points(exclusion_points: list[ExclusionPoint]):
 
     async with lock:
         return [active_exclusion_list.is_excluded(point) for point in exclusion_points]
+
+
+@app.post("/exclusionms/points/exclusion_search_batch", response_model=List[bool], status_code=200, tags=["Points"])
+async def exclusion_search_batch(batch_msg: ExclusionPointBatchMessage):
+    exclusion_points = batch_msg.construct_points()
+    for point in exclusion_points:
+        apply_offset(point, offset)
+
+    async with lock:
+        return [active_exclusion_list.is_excluded(point) for point in exclusion_points]
+
+
+@app.post("/exclusionms/points/inclusion_search", response_model=List[bool], status_code=200, tags=["Points"])
+async def inclusion_search_points(exclusion_points: list[ExclusionPoint]):
+    """
+    Checks whether each specified ExclusionPoint is excluded by the active exclusion list.
+    If successful, returns a status code of 200.
+
+    Args:
+        exclusion_points: A list of ExclusionPoint objects representing the points to check.
+
+    Returns:
+        A list of boolean values representing whether each input ExclusionPoint is excluded by the active exclusion list.
+
+    Notes:
+        The function applies any offset values specified in the ExclusionPoint objects before checking exclusion.
+    """
+    for point in exclusion_points:
+        apply_offset(point, offset)
+
+    async with lock:
+        return [active_exclusion_list.is_included(point) for point in exclusion_points]
+
+
+@app.post("/exclusionms/points/inclusion_search_batch", response_model=List[bool], status_code=200, tags=["Points"])
+async def inclusion_search_batch(batch_msg: ExclusionPointBatchMessage):
+    exclusion_points = batch_msg.construct_points()
+    for point in exclusion_points:
+        apply_offset(point, offset)
+
+    async with lock:
+        return [active_exclusion_list.is_included(point) for point in exclusion_points]
+
+
+@app.post("/exclusionms/points/status_search", response_model=List[int], status_code=200, tags=["Points"])
+async def status_search_points(exclusion_points: list[ExclusionPoint]):
+    """
+    Checks whether each specified ExclusionPoint is excluded by the active exclusion list.
+    If successful, returns a status code of 200.
+
+    Args:
+        exclusion_points: A list of ExclusionPoint objects representing the points to check.
+
+    Returns:
+        A list of boolean values representing whether each input ExclusionPoint is excluded by the active exclusion list.
+
+    Notes:
+        The function applies any offset values specified in the ExclusionPoint objects before checking exclusion.
+    """
+    for point in exclusion_points:
+        apply_offset(point, offset)
+
+    async with lock:
+        return [active_exclusion_list.point_status(point) for point in exclusion_points]
+
+
+@app.post("/exclusionms/points/status_search_batch", response_model=List[int], status_code=200, tags=["Points"])
+async def status_search_batch(batch_msg: ExclusionPointBatchMessage):
+    exclusion_points = batch_msg.construct_points()
+    for point in exclusion_points:
+        apply_offset(point, offset)
+
+    async with lock:
+        return [active_exclusion_list.point_status(point) for point in exclusion_points]
 
 
 @app.get("/exclusionms/offset", status_code=200, tags=['Offset'])
