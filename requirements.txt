@@ -3,5 +3,5 @@ fastapi==0.114.2
 intervaltree==3.1.0
 uvicorn==0.20.0
 pytest==7.2.1
-exclusionms==0.4.0
+exclusionms==0.4.1
 starlette==0.38.5
