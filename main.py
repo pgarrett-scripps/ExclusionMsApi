@@ -1,4 +1,5 @@
 import logging
+import subprocess
 from logging.handlers import RotatingFileHandler
 
 from typing import List, Dict
@@ -550,3 +551,14 @@ async def get_log_entries(num_entries: int = 500):
                 pass
 
     return entries
+
+
+def get_installed_packages():
+    result = subprocess.run(['pip', 'list'], stdout=subprocess.PIPE)
+    return result.stdout.decode('utf-8')
+
+@app.get('/version') # return all pip packages and versions
+async def get_version():
+    ipackages = get_installed_packages()
+    return ipackages
+
