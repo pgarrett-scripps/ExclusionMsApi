@@ -1,4 +1,4 @@
-requests==2.28.2
+requests==2.32.3
 fastapi==0.114.2
 intervaltree==3.1.0
 uvicorn==0.20.0
