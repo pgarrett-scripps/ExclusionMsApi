@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 from typing import List, Dict
 
 from fastapi import HTTPException, FastAPI, BackgroundTasks
+from fastapi.exceptions import RequestValidationError
 
 from constants import DATA_FOLDER
 from exclusionms.components import ExclusionInterval, ExclusionPoint, ExclusionPointBatchMessage
@@ -15,7 +16,7 @@ import asyncio
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse
 import time
 import json
 import os
@@ -34,6 +35,7 @@ logging.basicConfig(
         logging.StreamHandler()
     ],
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,27 @@ app = FastAPI(
 )
 
 app.add_middleware(LoggingMiddleware)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Attempt to read the raw request body, even if it's invalid JSON
+    try:
+        body = await request.body()  # Get the raw body content as bytes
+        body_content = body.decode("utf-8")  # Decode it to a string for logging
+    except Exception:
+        body_content = "Could not retrieve body (possibly non-UTF-8 encoded)"
+
+    logging.error(f"Request validation error: {exc}")
+    logging.error(f"Request body content: {body_content}")
+
+    # Build a detailed error response
+    error_detail = {
+        "error": "Request validation failed",
+        "errors": exc.errors(),
+        "request_body": body_content
+    }
+    return JSONResponse(status_code=422, content=error_detail)
 
 tags_metadata = [
     {
@@ -292,7 +315,10 @@ async def search_intervals(exclusion_intervals: List[ExclusionInterval]):
 async def process_intervals(exclusion_intervals: List[ExclusionInterval]):
     for interval in exclusion_intervals:
         async with lock:
-            active_exclusion_list.add(interval)
+            try:
+                active_exclusion_list.add(interval)
+            except Exception as e:
+                _log.error(f'Error when adding interval: {e}', exc_info=True)
 
 
 @app.post("/exclusionms/intervals", response_model=None, status_code=200, tags=["Intervals"])
@@ -306,6 +332,7 @@ async def add_intervals(exclusion_intervals: List[ExclusionInterval], background
     Returns:
         None.
 
+    Raises:
     Raises:
         HTTPException 400: If any of the input exclusion intervals is invalid (i.e. its minimum bound is greater than
         its maximum bound)
